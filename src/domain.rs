@@ -169,6 +169,5 @@ fn serialize_decimal_with_precision_4<S>(
 where
     S: Serializer,
 {
-    let rounded = decimal.round_dp(4);
-    serializer.serialize_str(&format!("{}", rounded))
+    serializer.serialize_str(&format!("{:.4}", decimal))
 }

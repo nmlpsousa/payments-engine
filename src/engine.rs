@@ -2,7 +2,7 @@ use crate::domain::TransactionStatus::{ChargedBack, Disputed, Resolved, Settled}
 use crate::domain::{ClientId, Transaction, TransactionId, TransactionType};
 use crate::engine::ProcessingError::{
     BalanceOverflow, InsufficientFunds, InvalidDispute, InvalidTransactionStatus,
-    TransactionAlreadyDisputed, TransactionNotFound,
+    TransactionNotFound,
 };
 use rust_decimal::Decimal;
 use std::collections::HashMap;
@@ -17,7 +17,9 @@ pub struct ClientAccount {
 
 impl ClientAccount {
     pub fn total(&self) -> Decimal {
-        self.available_balance + self.held_balance
+        self.available_balance
+            .checked_add(self.held_balance)
+            .unwrap_or(Decimal::MAX)
     }
 }
 
@@ -28,7 +30,6 @@ pub enum ProcessingError {
     BalanceOverflow,
     AccountLocked,
     TransactionNotFound,
-    TransactionAlreadyDisputed,
     InvalidTransactionStatus,
     InvalidDispute,
 }
@@ -117,9 +118,9 @@ impl PaymentsEngine {
             return Err(InvalidDispute);
         }
 
-        if !matches!(original_tx.tx_status, Settled) {
-            // A dispute can only be opened on a transaction that hasn't had any other disputes
-            return Err(TransactionAlreadyDisputed);
+        if !matches!(original_tx.tx_status, Settled | Resolved) {
+            // A dispute can only be opened on a transaction that is settled, or that has had disputes that have since been resolved
+            return Err(InvalidDispute);
         }
 
         // Safe to unwrap as client is guaranteed to exist at this point
@@ -130,8 +131,11 @@ impl PaymentsEngine {
             return Err(InsufficientFunds);
         }
 
+        client.held_balance = client
+            .held_balance
+            .checked_add(original_amount)
+            .ok_or(BalanceOverflow)?;
         client.available_balance -= original_amount;
-        client.held_balance += original_amount;
 
         original_tx.tx_status = Disputed;
 
@@ -156,7 +160,10 @@ impl PaymentsEngine {
         let client = self.clients.get_mut(&transaction.client).unwrap();
 
         let original_amount = original_tx.amount.unwrap().value();
-        client.available_balance += original_amount;
+        client.available_balance = client
+            .available_balance
+            .checked_add(original_amount)
+            .ok_or(BalanceOverflow)?;
         client.held_balance -= original_amount;
         original_tx.tx_status = Resolved;
 
@@ -190,11 +197,6 @@ impl PaymentsEngine {
 
     pub fn client_accounts(&self) -> &HashMap<ClientId, ClientAccount> {
         &self.clients
-    }
-
-    #[cfg(test)]
-    pub fn transaction_history(&self) -> &HashMap<TransactionId, Transaction> {
-        &self.transaction_history
     }
 
     #[cfg(test)]
@@ -577,7 +579,7 @@ mod tests {
         let dispute2 = create_transaction(Dispute, 1, 1, None);
         let result = engine.process_transaction(dispute2);
 
-        assert_eq!(result, Err(ProcessingError::TransactionAlreadyDisputed));
+        assert_eq!(result, Err(ProcessingError::InvalidDispute));
 
         let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
         assert_eq!(client_account.available_balance, Decimal::ZERO);
@@ -598,11 +600,11 @@ mod tests {
         let dispute2 = create_transaction(Dispute, 1, 1, None);
         let result = engine.process_transaction(dispute2);
 
-        assert_eq!(result, Err(ProcessingError::TransactionAlreadyDisputed));
+        assert!(result.is_ok());
 
         let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
-        assert_eq!(client_account.available_balance, Decimal::TEN);
-        assert_eq!(client_account.held_balance, Decimal::ZERO);
+        assert_eq!(client_account.available_balance, Decimal::ZERO);
+        assert_eq!(client_account.held_balance, Decimal::TEN);
     }
 
     #[test]
