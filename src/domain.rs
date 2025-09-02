@@ -108,7 +108,7 @@ pub struct TransactionRow {
     pub amount: Option<Amount>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Transaction {
     pub tx_type: TransactionType,
     pub client: ClientId,
@@ -129,7 +129,7 @@ impl From<TransactionRow> for Transaction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TransactionStatus {
     Pending,
     Settled,
