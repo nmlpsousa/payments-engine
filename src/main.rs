@@ -1,8 +1,5 @@
-mod csv;
-mod domain;
-mod engine;
-
-use crate::engine::PaymentsEngine;
+use payments_engine::engine::PaymentsEngine;
+use payments_engine::csv;
 use anyhow::{anyhow, Context};
 use std::env;
 use std::fs::File;
