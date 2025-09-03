@@ -1,20 +1,22 @@
-use anyhow::{anyhow, Context};
+use anyhow::Context;
+use clap::Parser;
 use payments_engine::csv;
 use payments_engine::engine::PaymentsEngine;
-use std::env;
 use std::fs::File;
 use std::io::stdout;
+use std::path::PathBuf;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct Cli {
+    pub csv_path: PathBuf,
+}
 
 fn main() -> anyhow::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        return Err(anyhow!("Unexpected number of arguments passed"));
-    }
+    let args = Cli::parse();
+    let file = File::open(args.csv_path).context("Failed to open input file")?;
 
-    let csv_filename = &args[1];
-    let file = File::open(csv_filename).context("Failed to open input file")?;
-
-    let mut engine = PaymentsEngine::default();
+    let mut engine = PaymentsEngine::new();
     csv::process_csv_transactions(&mut engine, file);
     csv::print_account_records(&engine, stdout())?;
 
