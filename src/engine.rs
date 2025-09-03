@@ -1,7 +1,7 @@
 use crate::domain::TransactionStatus::{ChargedBack, Disputed, Resolved, Settled};
 use crate::domain::{ClientId, Transaction, TransactionId, TransactionType};
 use crate::engine::ProcessingError::{
-    BalanceOverflow, InsufficientFunds, InvalidDispute, InvalidTransactionStatus,
+    BalanceOverflow, InsufficientFunds, InvalidDispute, InvalidTransactionStatus, MissingAmount,
     TransactionNotFound,
 };
 use rust_decimal::Decimal;
@@ -91,7 +91,7 @@ impl PaymentsEngine {
 
         // Safe to unwrap as client has already been created in the main method
         let client = self.clients.get_mut(&transaction.client).unwrap();
-        if client.available_balance < transaction.amount.unwrap().value() {
+        if client.available_balance < amount.value() {
             return Err(InsufficientFunds);
         }
 
@@ -118,15 +118,15 @@ impl PaymentsEngine {
             return Err(InvalidDispute);
         }
 
+        // A dispute can only be opened on a transaction that is settled, or that has had disputes that have since been resolved
         if !matches!(original_tx.tx_status, Settled | Resolved) {
-            // A dispute can only be opened on a transaction that is settled, or that has had disputes that have since been resolved
             return Err(InvalidDispute);
         }
 
         // Safe to unwrap as client is guaranteed to exist at this point
         let client = self.clients.get_mut(&transaction.client).unwrap();
 
-        let original_amount = original_tx.amount.unwrap().value();
+        let original_amount = original_tx.amount.ok_or(MissingAmount)?.value();
         if client.available_balance < original_amount {
             return Err(InsufficientFunds);
         }
@@ -159,7 +159,7 @@ impl PaymentsEngine {
         // Safe to unwrap as client is guaranteed to exist at this point
         let client = self.clients.get_mut(&transaction.client).unwrap();
 
-        let original_amount = original_tx.amount.unwrap().value();
+        let original_amount = original_tx.amount.ok_or(MissingAmount)?.value();
         client.available_balance = client
             .available_balance
             .checked_add(original_amount)
@@ -187,7 +187,7 @@ impl PaymentsEngine {
         // Safe to unwrap as client is guaranteed to exist at this point
         let client = self.clients.get_mut(&transaction.client).unwrap();
 
-        let original_amount = original_tx.amount.unwrap().value();
+        let original_amount = original_tx.amount.ok_or(MissingAmount)?.value();
         client.held_balance -= original_amount;
         client.locked = true;
         original_tx.tx_status = ChargedBack;

@@ -6,6 +6,7 @@ use crate::engine::PaymentsEngine;
 use anyhow::{anyhow, Context};
 use std::env;
 use std::fs::File;
+use std::io::stdout;
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -18,7 +19,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut engine = PaymentsEngine::new();
     csv::process_csv_transactions(&mut engine, file);
-    csv::print_account_records(&engine)?;
+    csv::print_account_records(&engine, stdout())?;
 
     Ok(())
 }

@@ -3,7 +3,7 @@ use crate::engine::ClientAccount;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(transparent)]
@@ -59,11 +59,11 @@ impl TransactionType {
 pub struct Amount(Decimal);
 
 impl Amount {
-    pub fn new(val: Decimal) -> Result<Self, String> {
+    pub fn new(val: Decimal) -> Result<Self, AmountError> {
         if val > Decimal::ZERO {
             Ok(Self(val))
         } else {
-            Err("Amount must be greater than zero".to_string())
+            Err(AmountError::NonPositiveAmount(val))
         }
     }
 
@@ -72,8 +72,21 @@ impl Amount {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum AmountError {
+    NonPositiveAmount(Decimal),
+}
+
+impl Display for AmountError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AmountError::NonPositiveAmount(dec) => write!(f, "Amount must be positive: {}", dec),
+        }
+    }
+}
+
 impl TryFrom<Decimal> for Amount {
-    type Error = String;
+    type Error = AmountError;
 
     fn try_from(value: Decimal) -> Result<Self, Self::Error> {
         Self::new(value)
