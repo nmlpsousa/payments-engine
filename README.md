@@ -70,6 +70,10 @@ ClientId, for instance.
 * `Amount(Decimal)`
     * Guaranteed to be a positive `Decimal`
 
+### Error Handling
+
+The application will skip processing invalid rows, whether due to formatting issues or incorrect data. Only critical failures, such as being unable to read the input file or write to stdout, will cause the application to panic.
+
 ## AI Policy
 
 Used ChatGPT for general questions, and for help on how to use some functionality of crates such as `serde`
