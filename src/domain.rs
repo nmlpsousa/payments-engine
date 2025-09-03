@@ -80,7 +80,7 @@ pub enum AmountError {
 impl Display for AmountError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            AmountError::NonPositiveAmount(dec) => write!(f, "Amount must be positive: {}", dec),
+            AmountError::NonPositiveAmount(dec) => write!(f, "Amount must be positive: {dec}"),
         }
     }
 }
@@ -182,5 +182,5 @@ fn serialize_decimal_with_precision_4<S>(
 where
     S: Serializer,
 {
-    serializer.serialize_str(&format!("{:.4}", decimal))
+    serializer.serialize_str(&format!("{decimal:.4}"))
 }

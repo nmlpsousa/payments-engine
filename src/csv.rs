@@ -14,11 +14,11 @@ pub fn process_csv_transactions(engine: &mut PaymentsEngine, input: impl io::Rea
         match result {
             Ok(transaction) => {
                 if let Err(e) = engine.process_transaction(transaction.into()) {
-                    eprintln!("An error occurred while processing a transaction: {:?}", e);
+                    eprintln!("An error occurred while processing a transaction: {e:?}");
                 }
             }
             Err(e) => {
-                eprintln!("An error occurred while deserializing a row: {}", e);
+                eprintln!("An error occurred while deserializing a row: {e}");
             }
         }
     }

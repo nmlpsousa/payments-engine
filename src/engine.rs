@@ -39,6 +39,12 @@ pub struct PaymentsEngine {
     transaction_history: HashMap<TransactionId, Transaction>,
 }
 
+impl Default for PaymentsEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PaymentsEngine {
     pub fn new() -> Self {
         Self {
@@ -336,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    fn test_overflowing_deposits() {
+    fn test_deposit_balance_overflow() {
         let mut engine = PaymentsEngine::new();
         let large_amount = Decimal::MAX;
         let tx1 = create_transaction(Deposit, 1, 1, Some(large_amount));
@@ -659,5 +665,135 @@ mod tests {
         let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
         assert_eq!(client_account.available_balance, Decimal::TEN);
         assert_eq!(client_account.held_balance, Decimal::ZERO);
+    }
+
+    #[test]
+    fn test_resolve_happy_path() {
+        let mut engine = PaymentsEngine::new();
+
+        let deposit = create_transaction(Deposit, 1, 1, Some(Decimal::TEN));
+        let dispute = create_transaction(Dispute, 1, 1, None);
+        let resolve = create_transaction(Resolve, 1, 1, None);
+        engine.process_transaction(deposit).unwrap();
+        engine.process_transaction(dispute).unwrap();
+        let result = engine.process_transaction(resolve);
+
+        assert!(result.is_ok());
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::TEN);
+        assert_eq!(client_account.total(), Decimal::TEN);
+    }
+
+    #[test]
+    fn test_resolve_undisputed_transaction() {
+        let mut engine = PaymentsEngine::new();
+
+        let deposit = create_transaction(Deposit, 1, 1, Some(Decimal::TEN));
+        let resolve = create_transaction(Resolve, 1, 1, None);
+        engine.process_transaction(deposit).unwrap();
+        let result = engine.process_transaction(resolve);
+
+        assert_eq!(result, Err(ProcessingError::InvalidTransactionStatus));
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::TEN);
+        assert_eq!(client_account.total(), Decimal::TEN);
+    }
+
+    #[test]
+    fn test_resolve_transaction_not_found() {
+        let mut engine = PaymentsEngine::new();
+
+        let resolve = create_transaction(Resolve, 1, 1, None);
+        let result = engine.process_transaction(resolve);
+
+        assert_eq!(result, Err(ProcessingError::TransactionNotFound));
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::ZERO);
+        assert_eq!(client_account.total(), Decimal::ZERO);
+    }
+
+    #[test]
+    fn test_resolve_invalid_client() {
+        let mut engine = PaymentsEngine::new();
+
+        let deposit = create_transaction(Deposit, 1, 1, Some(Decimal::TEN));
+        let dispute = create_transaction(Dispute, 1, 1, None);
+        let resolve = create_transaction(Resolve, 2, 1, None);
+        engine.process_transaction(deposit).unwrap();
+        engine.process_transaction(dispute).unwrap();
+        let result = engine.process_transaction(resolve);
+
+        assert_eq!(result, Err(TransactionNotFound));
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::ZERO);
+        assert_eq!(client_account.held_balance, Decimal::TEN);
+        assert_eq!(client_account.total(), Decimal::TEN);
+    }
+
+    #[test]
+    fn test_chargeback_happy_path() {
+        let mut engine = PaymentsEngine::new();
+
+        let deposit = create_transaction(Deposit, 1, 1, Some(Decimal::TEN));
+        let dispute = create_transaction(Dispute, 1, 1, None);
+        let resolve = create_transaction(Chargeback, 1, 1, None);
+        engine.process_transaction(deposit).unwrap();
+        engine.process_transaction(dispute).unwrap();
+        let result = engine.process_transaction(resolve);
+
+        assert!(result.is_ok());
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::ZERO);
+        assert_eq!(client_account.total(), Decimal::ZERO);
+        assert!(client_account.locked);
+    }
+
+    #[test]
+    fn test_chargeback_undisputed_transaction() {
+        let mut engine = PaymentsEngine::new();
+
+        let deposit = create_transaction(Deposit, 1, 1, Some(Decimal::TEN));
+        let resolve = create_transaction(Chargeback, 1, 1, None);
+        engine.process_transaction(deposit).unwrap();
+        let result = engine.process_transaction(resolve);
+
+        assert_eq!(result, Err(ProcessingError::InvalidTransactionStatus));
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::TEN);
+        assert_eq!(client_account.total(), Decimal::TEN);
+        assert!(!client_account.locked);
+    }
+
+    #[test]
+    fn test_chargeback_transaction_not_found() {
+        let mut engine = PaymentsEngine::new();
+
+        let resolve = create_transaction(Chargeback, 1, 1, None);
+        let result = engine.process_transaction(resolve);
+
+        assert_eq!(result, Err(ProcessingError::TransactionNotFound));
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::ZERO);
+        assert_eq!(client_account.total(), Decimal::ZERO);
+        assert!(!client_account.locked);
+    }
+
+    #[test]
+    fn test_chargeback_invalid_client() {
+        let mut engine = PaymentsEngine::new();
+
+        let deposit = create_transaction(Deposit, 1, 1, Some(Decimal::TEN));
+        let dispute = create_transaction(Dispute, 1, 1, None);
+        let resolve = create_transaction(Chargeback, 2, 1, None);
+        engine.process_transaction(deposit).unwrap();
+        engine.process_transaction(dispute).unwrap();
+        let result = engine.process_transaction(resolve);
+
+        assert_eq!(result, Err(TransactionNotFound));
+        let client_account = engine.clients.get(&ClientId::new(1)).unwrap();
+        assert_eq!(client_account.available_balance, Decimal::ZERO);
+        assert_eq!(client_account.held_balance, Decimal::TEN);
+        assert_eq!(client_account.total(), Decimal::TEN);
+        assert!(!client_account.locked);
     }
 }

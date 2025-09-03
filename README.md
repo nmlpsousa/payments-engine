@@ -31,6 +31,7 @@ The following assumptions have been made when designing and implementing this ap
   happen, the respective transaction is ignored.
     * In the case of total balance calculation (available + held), the application defaults to `Decimal::MAX` to prevent
       panicking
+* Invalid CSV rows are ignored
 
 ## Design Choices
 
@@ -53,13 +54,29 @@ This approach would provide horizontal scalability while maintaining data consis
 Standard transactions (deposits and withdrawals) are idempotent based on transaction ID. If the same deposit or
 withdrawal transaction ID appears multiple times in the file, only the first occurrence will be processed while
 subsequent
-duplicates are ignored. This approach enables safe retries without risking duplicate side-effects or double-processing
+duplicates are ignored. This approach enables safe retries without risking duplicate side effects or double-processing
 of funds.
 
 ### Type Safety
 
-Used newtypes for increased type safety:
+Used newtypes for increased type safety and clarity.
+
+This way instead of passing `u16`, `u32` and `Decimal` around, it is clear when a function expects a u16 that represents
+a
+ClientId, for instance.
 
 * `ClientId(u16)`
 * `TransactionId(u32)`
 * `Amount(Decimal)`
+    * Guaranteed to be a positive `Decimal`
+
+## AI Policy
+
+Used ChatGPT for general questions, and for help on how to use some functionality of crates such as `serde`
+and `rust_decimal`.
+
+Example prompts:
+
+* What is the best way to serialize a `Decimal` from the `rust_decimal` crate with precision 4, using `serde`?
+* In the context of a payments engine, should disputes be allowed on the same transaction multiple times?
+* What are the pros and cons between implementing newtypes vs type aliases?
